@@ -6,15 +6,23 @@
 import * as Fun from 'fp-ts/Functor'
 import * as Ap from 'fp-ts/Apply'
 import * as Apl from 'fp-ts/Applicative'
+import * as Chn from 'fp-ts/Chain'
+import * as Fld from 'fp-ts/Field'
+import * as Sg from 'fp-ts/Semigroup'
+import * as Mon from 'fp-ts/Monad'
+import * as Mn from 'fp-ts/Monoid'
 import * as Pt from 'fp-ts/Pointed'
 import * as RA from 'fp-ts/ReadonlyArray'
 import * as RNEA from 'fp-ts/ReadonlyNonEmptyArray'
-import * as Mon from 'fp-ts/Monad'
 import * as N from 'fp-ts/number'
 import { flow, identity, pipe } from 'fp-ts/function'
 
 import { everywhere, trap } from './lib/TanhSinh'
 import { choose, logBeta } from './lib/utilities'
+
+// #############
+// ### Model ###
+// #############
 
 /**
  * @since 1.0.0
@@ -27,6 +35,46 @@ export interface Measure<A> {
 // ####################
 // ### Constructors ###
 // ####################
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const fromMassFunction: <A>(
+  f: (a: A) => number
+) => (support: ReadonlyArray<A>) => Measure<A> = f => support => g =>
+  pipe(
+    support,
+    RA.foldMap(N.MonoidSum)(x => f(x) * g(x))
+  )
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const fromDensityFunction: (d: (n: number) => number) => Measure<number> =
+  d => f => {
+    const quadratureTanhSinh = flow(everywhere(trap), RNEA.last, ({ result }) => result)
+    return quadratureTanhSinh(x => f(x) * d(x))
+  }
+
+/**
+ * @since 1.0.0
+ * @category Internal
+ */
+const weightedAverage: <A>(f: (a: A) => number) => (as: ReadonlyArray<A>) => number =
+  f => as =>
+    pipe(
+      as,
+      RA.foldMap(N.MonoidSum)(a => f(a) / as.length)
+    )
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const fromSample: <A>(as: ReadonlyArray<A>) => Measure<A> = as => f =>
+  weightedAverage(f)(as)
 
 /**
  * @since 1.0.0
@@ -46,6 +94,30 @@ export const beta: (a: number) => (b: number) => Measure<number> = a => b => {
   const density: (a: number) => (b: number) => (p: number) => number = a => b => p =>
     p < 0 || p > 1 ? 0 : (1 / Math.exp(logBeta(a)(b))) * p ** (a - 1) * (1 - p) ** b - 1
   return fromDensityFunction(density(a)(b))
+}
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const gaussian: (m: number) => (s: number) => Measure<number> = m => s => {
+  const density: (m: number) => (s: number) => (x: number) => number = m => s => x =>
+    s <= 0
+      ? 0
+      : (1 / (s * Math.sqrt(2 * Math.PI))) * Math.exp(-((x - m) ** 2) / (2 * s ** 2))
+  return fromDensityFunction(density(m)(s))
+}
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const chisq: (k: number) => Measure<number> = k => {
+  const normal = pipe(
+    gaussian(0)(1),
+    map(x => x ** 2)
+  )
+  return pipe(RNEA.replicate(normal)(k), RA.foldMap(MonoidSum)(identity))
 }
 
 // #####################
@@ -147,22 +219,91 @@ export const chain: <A, B>(f: (a: A) => Measure<B>) => (rho: Measure<A>) => Meas
       integrate(m => pipe(f(m), integrate(g)))
     )
 
+export const Chain: Chn.Chain1<URI> = {
+  ...Apply,
+  chain: _chain,
+}
+
 /**
  * @since 1.0.0
  * @category Instances
  */
 export const Monad: Mon.Monad1<URI> = {
   ...Applicative,
-  chain: _chain,
+  ...Chain,
 }
-
-// #################
-// ### Utilities ###
-// #################
 
 /**
  * @since 1.0.0
- * @category Utilities
+ * @category Internal
+ */
+const liftA2: <A>(
+  b: (x1: A, y1: A) => A
+) => (x2: Measure<A>, y2: Measure<A>) => Measure<A> = b => (x2, y2) =>
+  pipe(
+    Do,
+    apS('x', x2),
+    apS('y', y2),
+    map(({ x, y }) => b(x, y))
+  )
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const getSemigroup: <A>(S: Sg.Semigroup<A>) => Sg.Semigroup<Measure<A>> = S => ({
+  concat: liftA2(S.concat),
+})
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const getMonoid: <A>(M: Mn.Monoid<A>) => Mn.Monoid<Measure<A>> = M => ({
+  empty: of(M.empty),
+  ...getSemigroup(M),
+})
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const getField: <A>(F: Fld.Field<A>) => Fld.Field<Measure<A>> = F => ({
+  add: liftA2(F.add),
+  zero: of(F.zero),
+  sub: liftA2(F.sub),
+  mul: liftA2(F.mul),
+  one: of(F.one),
+  div: liftA2(F.div),
+  degree: of(F.degree),
+  mod: liftA2(F.mod),
+})
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const MonoidSum: Mn.Monoid<Measure<number>> = getMonoid(N.MonoidSum)
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const MonoidProudct: Mn.Monoid<Measure<number>> = getMonoid(N.MonoidProduct)
+
+/**
+ * @since 1.0.0
+ * @category Instances
+ */
+export const FieldNumber: Fld.Field<Measure<number>> = getField(N.Field)
+
+// ###################
+// ### Destructors ###
+// ##################
+
+/**
+ * @since 1.0.0
+ * @category Destructors
  */
 export const integrate: <A>(f: (a: A) => number) => (nu: Measure<A>) => number =
   f => nu =>
@@ -170,53 +311,13 @@ export const integrate: <A>(f: (a: A) => number) => (nu: Measure<A>) => number =
 
 /**
  * @since 1.0.0
- * @category Utilities
- */
-export const fromMassFunction: <A>(
-  f: (a: A) => number
-) => (support: ReadonlyArray<A>) => Measure<A> = f => support => g =>
-  pipe(
-    support,
-    RA.foldMap(N.MonoidSum)(x => f(x) * g(x))
-  )
-
-/**
- * @since 1.0.0
- * @category Utilities
- */
-export const fromDensityFunction: (d: (n: number) => number) => Measure<number> =
-  d => f => {
-    const quadratureTanhSinh = flow(everywhere(trap), RNEA.last, ({ result }) => result)
-    return quadratureTanhSinh(x => f(x) * d(x))
-  }
-
-/**
- * @since 1.0.0
- * @category Utilities
- */
-const weightedAverage: <A>(f: (a: A) => number) => (as: ReadonlyArray<A>) => number =
-  f => as =>
-    pipe(
-      as,
-      RA.foldMap(N.MonoidSum)(a => f(a) / as.length)
-    )
-
-/**
- * @since 1.0.0
- * @category Utilities
- */
-export const fromSample: <A>(as: ReadonlyArray<A>) => Measure<A> = as => f =>
-  weightedAverage(f)(as)
-
-/**
- * @since 1.0.0
- * @category Utilities
+ * @category Destructors
  */
 export const expectation: (nu: Measure<number>) => number = integrate(identity)
 
 /**
  * @since 1.0.0
- * @category Utilities
+ * @category Destructors
  */
 export const variance: (nu: Measure<number>) => number = nu =>
   pipe(
@@ -227,8 +328,58 @@ export const variance: (nu: Measure<number>) => number = nu =>
 
 /**
  * @since 1.0.0
- * @category Utilities
+ * @category Destructors
  */
 export const momentGeneratingFunction: (
   t: number
 ) => (nu: Measure<number>) => number = t => integrate(x => Math.exp(t * x))
+
+// ###################
+// ### Combinators ###
+// ###################
+
+/**
+ * @since 1.0.0
+ * @category Combinators
+ */
+export const apFirst = Ap.apFirst(Apply)
+
+/**
+ * @since 1.0.0
+ * @category Combinators
+ */
+export const apSecond = Ap.apSecond(Apply)
+
+/**
+ * @since 1.0.0
+ * @category Combinators
+ */
+export const flatten: <A>(fa: Measure<Measure<A>>) => Measure<A> = chain(identity)
+
+// ###################
+// ### Do Notation ###
+// ###################
+
+/**
+ * @since 1.0.0
+ * @category Do notation
+ */
+export const Do = of({})
+
+/**
+ * @since 1.0.0
+ * @category Do notation
+ */
+export const bindTo = Fun.bindTo(Functor)
+
+/**
+ * @since 1.0.0
+ * @category Do notation
+ */
+export const bind = Chn.bind(Chain)
+
+/**
+ * @since 1.0.0
+ * @category Do notation
+ */
+export const apS = Ap.apS(Apply)
