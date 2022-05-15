@@ -14,6 +14,7 @@ import * as N from 'fp-ts/number'
 import { flow, identity, pipe } from 'fp-ts/function'
 
 import { everywhere, trap } from './lib/TanhSinh'
+import { choose, logBeta } from './lib/utilities'
 
 /**
  * @since 1.0.0
@@ -21,6 +22,30 @@ import { everywhere, trap } from './lib/TanhSinh'
  */
 export interface Measure<A> {
   (now: (a: A) => number): number
+}
+
+// ####################
+// ### Constructors ###
+// ####################
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const binomial: (n: number) => (p: number) => Measure<number> = n => p => {
+  const pmf: (n: number) => (p: number) => (x: number) => number = n => p => x =>
+    x < 0 || n < x ? 0 : choose(n)(x) * p ** x * (1 - p) ** (n - x)
+  return pipe(RNEA.range(0, n), fromMassFunction(pmf(n)(p)))
+}
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const beta: (a: number) => (b: number) => Measure<number> = a => b => {
+  const density: (a: number) => (b: number) => (p: number) => number = a => b => p =>
+    p < 0 || p > 1 ? 0 : (1 / Math.exp(logBeta(a)(b))) * p ** (a - 1) * (1 - p) ** b - 1
+  return fromDensityFunction(density(a)(b))
 }
 
 // #####################
