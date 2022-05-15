@@ -4,6 +4,8 @@ An implementation of the Giry probability monad in typescript with fp-ts.
 
 Based on [an article](https://jtobin.io/giry-monad-implementation) from Jared Tobin
 
+This is still a `WIP`. It isn't yet on NPM, but will be once it's in a stable state.
+
 ## Install
 
 Uses `fp-ts` as a peer dependency.
