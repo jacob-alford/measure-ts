@@ -2,22 +2,21 @@ import { pipe } from 'fp-ts/function'
 import * as Meas from '../Measure'
 
 describe('Measure', () => {
-  /** TODO: Figure out why Binomial is failing */
-  describe.skip('binomial()', () => {
+  describe('binomial()', () => {
     const n = 10
     const p = 0.5
     const binomial = Meas.binomial(n)(p)
     const prioriExpectation = n * p
     const prioriVariance = n * p * (1 - p)
     it('encodes expectation', () => {
-      expect(Meas.expectation(binomial)).toBeCloseTo(prioriExpectation)
+      expect(Meas.expectation(binomial)).toBeCloseTo(prioriExpectation, 0)
     })
     it('encodes variance', () => {
-      expect(Meas.variance(binomial)).toBeCloseTo(prioriVariance)
+      expect(Meas.variance(binomial)).toBeCloseTo(prioriVariance, 0)
     })
   })
   /** TODO: Figure out why Beta is failing */
-  describe.skip('beta', () => {
+  describe.skip('beta()', () => {
     const a = 10
     const b = 10
     const beta = Meas.beta(10)(10)

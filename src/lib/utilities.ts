@@ -126,7 +126,7 @@ const lanczosApprox: (z: number) => number = z => {
   return (Math.log(z + g - 0.5) - 1) * (z - 0.5) + Math.log(evalRatio(tableLanczos)(z))
 }
 
-const logGamma: (z: number) => number = z => {
+export const logGamma: (z: number) => number = z => {
   if (z <= 0) return Infinity
   // For very small values z we can just use Laurent expansion
   if (z < M_SQRT_EPS) return Math.log(1 / z - M_EULER_MASCHERONI)
@@ -201,10 +201,10 @@ export const logBeta: (a: number) => (b: number) => number = a => b => {
   return logGamma(p) + (logGamma(q) - logGamma(pq))
 }
 
-const chooseExact: (n: number) => (k: number) => number = k => n => {
+export const chooseExact: (n: number) => (k: number) => number = n => k => {
+  const nk = n - k
   const go: (a: number, i: number) => number = (a, i) => {
-    const nk = n - k
-    return (a * (nk + i)) / i
+    return a * ((nk + i) / i)
   }
   return pipe(RNEA.range(1, k), RA.reduce(1, go))
 }
@@ -215,7 +215,7 @@ const logChooseFast: (n: number) => (k: number) => number = n => k =>
 export const choose: (n: number) => (k: number) => number = n => k => {
   if (k > n) return 0
   const kP = Math.min(k, n - k)
-  if (kP < 50) return chooseExact(n)(k)
+  if (kP < 50) return chooseExact(n)(kP)
   const approx = pipe(kP, logChooseFast(n), Math.exp)
   const max64 = Infinity
   if (approx < max64) return Math.round(approx)
