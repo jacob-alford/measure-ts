@@ -92,7 +92,7 @@ export const binomial: (n: number) => (p: number) => Measure<number> = n => p =>
  */
 export const beta: (a: number) => (b: number) => Measure<number> = a => b => {
   const density: (a: number) => (b: number) => (p: number) => number = a => b => p =>
-    p < 0 || p > 1 ? 0 : (1 / Math.exp(logBeta(a)(b))) * p ** (a - 1) * (1 - p) ** b - 1
+    p < 0 || p > 1 ? 0 : (1 / Math.exp(logBeta(a)(b))) * p ** (a - 1) * (1 - p) ** (b - 1)
   return fromDensityFunction(density(a)(b))
 }
 
@@ -118,6 +118,15 @@ export const chisq: (k: number) => Measure<number> = k => {
     map(x => x ** 2)
   )
   return pipe(RNEA.replicate(normal)(k), RA.foldMap(MonoidSum)(identity))
+}
+
+/**
+ * @since 1.0.0
+ * @category Constructors
+ */
+export const exponential: (l: number) => Measure<number> = l => {
+  const exponential: (l: number) => (x: number) => number = l => x => l * Math.exp(-l * x)
+  return fromDensityFunction(exponential(l))
 }
 
 // #####################
@@ -333,6 +342,20 @@ export const variance: (nu: Measure<number>) => number = nu =>
 export const momentGeneratingFunction: (
   t: number
 ) => (nu: Measure<number>) => number = t => integrate(x => Math.exp(t * x))
+
+/**
+ * @since 1.0.0
+ * @category Internal
+ */
+const indicatorRange: (a: number) => (b: number) => (x: number) => number = a => b => x =>
+  x >= a && x <= b ? 1 : 0
+
+/**
+ * @since 1.0.0
+ * @category Destructors
+ */
+export const cdf: (nu: Measure<number>) => (x: number) => number = nu => x =>
+  pipe(nu, integrate(indicatorRange(-Infinity)(x)))
 
 // ###################
 // ### Combinators ###
